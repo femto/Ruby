@@ -1,4 +1,33 @@
 require 'immediate'
+module Marshal1
+  module Type
+
+  end
+end
+
+
+class BasicObject
+  def __marshal__(ms, strip_ivars = false)
+    out = ms.serialize_extended_object self
+    out << "o"
+    cls = self.class
+    name =  ::Marshal1::Type.module_inspect cls
+    out << ms.serialize(name.to_sym)
+    out << ms.serialize_instance_variables_suffix(self, true, strip_ivars)
+  end
+end
+
+class Class
+  def __marshal__(ms)
+    if Marshal1::Type.singleton_class_object(self)
+      raise TypeError, "singleton class can't be dumped"
+    elsif name.nil? || name.empty?
+      raise TypeError, "can't dump anonymous module #{self}"
+    end
+
+    "c#{ms.serialize_integer(name.length)}#{name}"
+  end
+end
 
 class NilClass
   def __marshal__(ms)
@@ -15,6 +44,41 @@ end
 class FalseClass
   def __marshal__(ms)
     Marshal1::Type.binary_string("F")
+  end
+end
+
+class Symbol
+  def __marshal__(ms)
+    if idx = ms.find_symlink(self)
+      Type.binary_string(";#{ms.serialize_integer(idx)}")
+    else
+      ms.add_symlink self
+      ms.serialize_symbol(self)
+    end
+  end
+end
+
+class String
+  def __marshal__(ms)
+    out =  ms.serialize_instance_variables_prefix(self)
+    out << ms.serialize_extended_object(self)
+    out << ms.serialize_user_class(self, String)
+    out << ms.serialize_string(self)
+    out << ms.serialize_instance_variables_suffix(self)
+    out
+  end
+end
+
+
+class Fixnum
+  def __marshal__(ms)
+    ms.serialize_integer(self, "i")
+  end
+end
+
+class Bignum
+  def __marshal__(ms)
+    ms.serialize_bignum(self)
   end
 end
 
@@ -297,6 +361,148 @@ module Marshal1
       Type.infect(str, obj)
     end
 
+    def serialize_encoding?(obj)
+      if obj.is_a? String
+        enc = obj.encoding
+        enc && enc != Encoding::BINARY
+      end
+    end
+
+    def serialize_extended_object(obj)
+      str = ''
+      if mods = Type.extended_modules(obj)
+        mods.each do |mod|
+          str << "e#{serialize(mod.name.to_sym)}"
+        end
+      end
+      Type.binary_string(str)
+    end
+
+    def serialize_symbol(obj)
+      str = obj.to_s
+      Type.binary_string(":#{serialize_integer(str.bytesize)}#{str}")
+    end
+
+    def serialize_string(str)
+      output = Type.binary_string("\"#{serialize_integer(str.bytesize)}")
+      output + Type.binary_string(str.dup)
+    end
+
+    def serializable_instance_variables(obj, exclude_ivars)
+      ivars = obj.instance_variables #todo, make it more private
+      ivars -= exclude_ivars if exclude_ivars
+      ivars
+    end
+
+    def serialize_instance_variables_prefix(obj, exclude_ivars = false)
+      ivars = serializable_instance_variables(obj, exclude_ivars)
+      Type.binary_string(!ivars.empty? || serialize_encoding?(obj) ? "I" : "")
+    end
+
+    def serialize_instance_variables_suffix(obj, force=false,
+        strip_ivars=false,
+        exclude_ivars=false)
+      ivars = serializable_instance_variables(obj, exclude_ivars)
+
+      unless force or !ivars.empty? or serialize_encoding?(obj)
+        return Type.binary_string("")
+      end
+
+      count = ivars.size
+
+      if serialize_encoding?(obj)
+        str = serialize_integer(count + 1)
+        str << serialize_encoding(obj)
+      else
+        str = serialize_integer(count)
+      end
+
+      ivars.each do |ivar|
+        sym = ivar.to_sym
+        val = obj.instance_variable_get(sym) #todo: more safe
+        if strip_ivars
+          str << serialize(ivar.to_s[1..-1].to_sym)
+        else
+          str << serialize(sym)
+        end
+        str << serialize(val)
+      end
+
+      Type.binary_string(str)
+    end
+
+    def serialize_integer(n, prefix = nil)
+      if (n.is_a?(Fixnum)) || ((n >> 31) == 0 or (n >> 31) == -1)
+        Type.binary_string(prefix.to_s + serialize_fixnum(n))
+      else
+        serialize_bignum(n)
+      end
+    end
+
+    def serialize_fixnum(n)
+      if n == 0
+        s = n.chr
+      elsif n > 0 and n < 123
+        s = (n + 5).chr
+      elsif n < 0 and n > -124
+        s = (256 + (n - 5)).chr
+      else
+        s = "\0"
+        cnt = 0
+        4.times do
+          s << (n & 0xff).chr
+          n >>= 8
+          cnt += 1
+          break if n == 0 or n == -1
+        end
+        s[0] = (n < 0 ? 256 - cnt : cnt).chr
+      end
+      Type.binary_string(s)
+    end
+
+    def serialize_bignum(n)
+      str = (n < 0 ? 'l-' : 'l+')
+      cnt = 0
+      num = n.abs
+
+      while num != 0
+        str << (num & 0xff).chr
+        num >>= 8
+        cnt += 1
+      end
+
+      if cnt % 2 == 1
+        str << "\0"
+        cnt += 1
+      end
+
+      Type.binary_string(str[0..1] + serialize_fixnum(cnt / 2) + str[2..-1])
+    end
+
+    def serialize_user_marshal(obj)
+      val = nil
+      #Rubinius.privately do
+        val = obj.marshal_dump
+      #end
+
+      add_object val
+
+      cls = obj.class
+      name = Type.module_inspect cls
+      Type.binary_string("U#{serialize(name.to_sym)}#{val.__marshal__(self)}")
+    end
+
+    def store_unique_object(obj)
+      if Symbol === obj
+        add_symlink obj
+      else
+        add_object obj
+      end
+      obj
+    end
+
+
+
   end
   class IOState < State
     def consume(bytes)
@@ -334,7 +540,7 @@ module Marshal1
       return data
     end
   end
-  class Type
+  module Type
     def self.coerce_to(obj, cls, meth)
       return obj if obj.kind_of?(cls)
       execute_coerce_to(obj, cls, meth)
@@ -362,6 +568,35 @@ module Marshal1
     def self.infect(host, source)
       host.taint if source.tainted?
       host
+    end
+
+    def self.extended_modules(obj)
+      singleton_class = (
+      class <<obj;
+        self;
+      end)
+      singleton_class.included_modules - obj.class.included_modules
+    end
+
+    def self.module_inspect(mod)
+      #sc = mod.singleton_class
+      #
+      #if sc
+      #  case sc
+      #    when Class, Module
+      #      name = "#<Class:#{module_inspect(sc)}>"
+      #    else
+      #      cls = object_class sc
+      #      name = "#<Class:#<#{module_name(cls)}:0x#{sc.object_id.to_s(16)}>>"
+      #  end
+      #else
+      #  name = module_name mod
+      #  if !name or name == ""
+      #    name = "#<#{object_class(mod)}:0x#{mod.object_id.to_s(16)}>"
+      #  end
+      #end
+      #
+      mod.inspect
     end
 
   end

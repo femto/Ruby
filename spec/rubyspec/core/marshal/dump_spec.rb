@@ -16,36 +16,39 @@ describe "Marshal.dump" do
     Marshal.dump(false).should == "\004\bF"
   end
 
-  #describe "with a Fixnum" do
-  #  it "dumps a Fixnum" do
-  #    [ [Marshal,  0,       "\004\bi\000"],
-  #      [Marshal,  5,       "\004\bi\n"],
-  #      [Marshal,  8,       "\004\bi\r"],
-  #      [Marshal,  122,     "\004\bi\177"],
-  #      [Marshal,  123,     "\004\bi\001{"],
-  #      [Marshal,  1234,    "\004\bi\002\322\004"],
-  #      [Marshal, -8,       "\004\bi\363"],
-  #      [Marshal, -123,     "\004\bi\200"],
-  #      [Marshal, -124,     "\004\bi\377\204"],
-  #      [Marshal, -1234,    "\004\bi\376.\373"],
-  #      [Marshal, -4516727, "\004\bi\375\211\024\273"],
-  #      [Marshal,  2**8,    "\004\bi\002\000\001"],
-  #      [Marshal,  2**16,   "\004\bi\003\000\000\001"],
-  #      [Marshal,  2**24,   "\004\bi\004\000\000\000\001"],
-  #      [Marshal, -2**8,    "\004\bi\377\000"],
-  #      [Marshal, -2**16,   "\004\bi\376\000\000"],
-  #      [Marshal, -2**24,   "\004\bi\375\000\000\000"],
-  #    ].should be_computed_by(:dump)
-  #  end
+  describe "with a Fixnum" do
+    it "dumps a Fixnum" do
+       [[Marshal,  0,       "\004\bi\000"],
+        [Marshal,  5,       "\004\bi\n"],
+        [Marshal,  8,       "\004\bi\r"],
+        [Marshal,  122,     "\004\bi\177"],
+        [Marshal,  123,     "\004\bi\001{"],
+        [Marshal,  1234,    "\004\bi\002\322\004"],
+        [Marshal, -8,       "\004\bi\363"],
+        [Marshal, -123,     "\004\bi\200"],
+        [Marshal, -124,     "\004\bi\377\204"],
+        [Marshal, -1234,    "\004\bi\376.\373"],
+        [Marshal, -4516727, "\004\bi\375\211\024\273"],
+        [Marshal,  2**8,    "\004\bi\002\000\001"],
+        [Marshal,  2**16,   "\004\bi\003\000\000\001"],
+        [Marshal,  2**24,   "\004\bi\004\000\000\000\001"],
+        [Marshal, -2**8,    "\004\bi\377\000"],
+        [Marshal, -2**16,   "\004\bi\376\000\000"],
+        [Marshal, -2**24,   "\004\bi\375\000\000\000"]]
+      .each do |obj, value, expected|
+         obj.send(:dump, value).should == expected
+       end
+    end
+  end
 
     #platform_is :wordsize => 64 do
-    #  it "dumps a positive Fixnum > 31 bits as a Bignum" do
-    #    Marshal.dump(2**31 + 1).should == "\x04\bl+\a\x01\x00\x00\x80"
-    #  end
-    #
-    #  it "dumps a negative Fixnum > 31 bits as a Bignum" do
-    #    Marshal.dump(-2**31 - 1).should == "\x04\bl-\a\x01\x00\x00\x80"
-    #  end
+      it "dumps a positive Fixnum > 31 bits as a Bignum" do
+        Marshal.dump(2**31 + 1).should == "\x04\bl+\a\x01\x00\x00\x80"
+      end
+
+      it "dumps a negative Fixnum > 31 bits as a Bignum" do
+        Marshal.dump(-2**31 - 1).should == "\x04\bl-\a\x01\x00\x00\x80"
+      end
     #end
   #end
 
@@ -59,7 +62,7 @@ describe "Marshal.dump" do
     end
 
     #ruby_version_is "1.9" do
-    #  it "dumps an encoded Symbol" do
+    # it "dumps an encoded Symbol" do
     #    Marshal.dump("\u2192".encode("utf-8").to_sym).should == "\x04\bI:\b\xE2\x86\x92\x06:\x06ET"
     #  end
     #end
