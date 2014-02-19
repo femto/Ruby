@@ -1,4 +1,5 @@
 require 'immediate'
+require 'bigdecimal'
 module Marshal1
   module Type
 
@@ -26,6 +27,71 @@ class Class
     end
 
     "c#{ms.serialize_integer(name.length)}#{name}"
+  end
+end
+
+class Module
+  def __marshal__(ms)
+    raise TypeError, "can't dump anonymous module #{self}" if name.nil? || name.empty?
+    "m#{ms.serialize_integer(name.length)}#{name}"
+  end
+end
+
+class Float
+  def __dtoa__
+    #s, decimal, sign, digits
+    s = ""
+    sign = self >= 0 ? 0 : 1
+    value = self.abs
+    decimal = 0
+    digits = 0
+
+    value = BigDecimal.new(self.to_s)
+    while value.to_i != value #computing digits after .
+      value *= 10
+      decimal -= 1
+    end
+
+    value = value.to_i
+    #now value is an integer
+    while value != 0
+      if value / 10 * 10 == value #still have 10's power
+        value /= 10
+        decimal += 1
+      end
+      break
+    end
+
+    #now value
+    s = value.to_s
+    digits = s.length
+    decimal += s.length
+    return s, decimal, sign, digits
+  end
+  def __marshal__(ms)
+    if nan?
+      str = "nan"
+    elsif zero?
+      str = (1.0 / self) < 0 ? '-0' : '0'
+    elsif infinite?
+      str = self < 0 ? "-inf" : "inf"
+    else
+      s, decimal, sign, digits = __dtoa__
+
+      if decimal < -3 or decimal > digits
+        str = s.insert(1, ".") << "e#{decimal - 1}"
+      elsif decimal > 0
+        str = s[0, decimal]
+        digits -= decimal
+        str << ".#{s[decimal, digits]}" if digits > 0
+      else
+        str = "0."
+        str << "0" * -decimal if decimal != 0
+        str << s[0, digits]
+      end
+    end
+
+    Marshal1::Type.binary_string("f#{ms.serialize_integer(str.length)}#{str}")
   end
 end
 
@@ -65,6 +131,39 @@ class String
     out << ms.serialize_user_class(self, String)
     out << ms.serialize_string(self)
     out << ms.serialize_instance_variables_suffix(self)
+    out
+  end
+end
+
+class Regexp
+  IGNORECASE         = 1
+  EXTENDED           = 2
+  MULTILINE          = 4
+  FIXEDENCODING      = 16
+  NOENCODING         = 32
+  DONT_CAPTURE_GROUP = 128
+  CAPTURE_GROUP      = 256
+
+  KCODE_NONE = (1 << 9)
+  KCODE_EUC  = (2 << 9)
+  KCODE_SJIS = (3 << 9)
+  KCODE_UTF8 = (4 << 9)
+  KCODE_MASK = KCODE_NONE | KCODE_EUC | KCODE_SJIS | KCODE_UTF8
+
+  OPTION_MASK = IGNORECASE | EXTENDED | MULTILINE | FIXEDENCODING | NOENCODING | DONT_CAPTURE_GROUP | CAPTURE_GROUP
+end
+
+class Regexp
+  def __marshal__(ms)
+    str = self.source
+    out =  ms.serialize_instance_variables_prefix(self)
+    out << ms.serialize_extended_object(self)
+    out << ms.serialize_user_class(self, Regexp)
+    out << "/"
+    out << ms.serialize_integer(str.length) + str
+    out << (options & Regexp::OPTION_MASK).chr
+    out << ms.serialize_instance_variables_suffix(self)
+
     out
   end
 end
@@ -368,6 +467,17 @@ module Marshal1
       end
     end
 
+    def serialize_encoding(obj)
+      case enc = obj.encoding
+        when Encoding::US_ASCII
+          :E.__marshal__(self) + false.__marshal__(self)
+        when Encoding::UTF_8
+          :E.__marshal__(self) + true.__marshal__(self)
+        else
+          :encoding.__marshal__(self) + serialize_string(enc.name)
+      end
+    end
+
     def serialize_extended_object(obj)
       str = ''
       if mods = Type.extended_modules(obj)
@@ -492,6 +602,37 @@ module Marshal1
       Type.binary_string("U#{serialize(name.to_sym)}#{val.__marshal__(self)}")
     end
 
+    def serialize_user_class(obj, cls)
+      if obj.class != cls
+        Type.binary_string("C#{serialize(obj.class.name.to_sym)}")
+      else
+        Type.binary_string('')
+      end
+    end
+
+    def serialize_user_defined(obj)
+      if obj.respond_to?(:__custom_marshal__)
+        return obj.__custom_marshal__(self)
+      end
+
+      str = nil
+      #Rubinius.privately do
+        str = obj._dump @depth
+      #end
+
+
+      unless str.kind_of?(String)
+        raise TypeError, "_dump() must return string"
+      end
+
+      out = serialize_instance_variables_prefix(str)
+      out << Type.binary_string("u#{serialize(obj.class.name.to_sym)}")
+      out << serialize_integer(str.length) + str
+      out << serialize_instance_variables_suffix(str)
+
+      out
+    end
+
     def store_unique_object(obj)
       if Symbol === obj
         add_symlink obj
@@ -599,6 +740,11 @@ module Marshal1
       mod.inspect
     end
 
+    def self.singleton_class_object(clazz)
+      #todo: determine if clazz is singleton_class
+      return false
+    end
+
   end
 
   class << self
@@ -663,3 +809,5 @@ module Marshal1
     alias_method :restore, :load
   end
 end
+
+#puts Marshal1.dump(2**30+1)

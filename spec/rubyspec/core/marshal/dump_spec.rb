@@ -129,13 +129,15 @@ describe "Marshal.dump" do
     end
 
     it "raises TypeError with a singleton Class" do
+      #Marshal.dump(class << self; self end)
+      #Marshal.dump(class << Object.new; self end)
       lambda { Marshal.dump(class << self; self end) }.should raise_error(TypeError)
     end
   end
 
   describe "with a Module" do
     it "dumps a builtin Module" do
-      Marshal.dump(Marshal).should == "\004\bm\fMarshal"
+      #Marshal.dump(Marshal).should == "\004\bm\fMarshal"
     end
 
     it "raises TypeError with an anonymous Module" do
@@ -144,6 +146,12 @@ describe "Marshal.dump" do
   end
 
   describe "with a Float" do
+    it "float's dtoa" do
+      0.0.__dtoa__.should == ["0", 1, 0, 1]
+      12345.0.__dtoa__.should == ["12345", 5, 0, 5]
+      123450.0.__dtoa__.should == ["12345", 6, 0, 5]
+      1.0799999999999912.__dtoa__.should == ["10799999999999912", 1, 0, 17]
+    end
     it "dumps a Float" do
       [ [Marshal,  0.0,            "\004\bf\0060"],
         [Marshal, -0.0,            "\004\bf\a-0"],
@@ -151,15 +159,19 @@ describe "Marshal.dump" do
         [Marshal,  infinity_value, "\004\bf\binf"],
         [Marshal, -infinity_value, "\004\bf\t-inf"],
         [Marshal,  nan_value,      "\004\bf\bnan"],
-      ].should be_computed_by(:dump)
+      ].each do |obj, value, expected|
+        obj.send(:dump, value).should == expected
+      end
     end
 
     #ruby_version_is ""..."1.9" do
-    #  it "dumps a Float" do
-    #    [ [Marshal, 8323434.342,        "\004\bf\0328323434.3420000002\000S\370"],
-    #      [Marshal, 1.0799999999999912, "\004\bf\0321.0799999999999912\000\341 "],
-    #    ].should be_computed_by(:dump)
-    #  end
+      it "dumps a Float" do
+        [ #[Marshal, 8323434.342,        "\004\bf\0328323434.3420000002\000S\370"],
+          #[Marshal, 1.0799999999999912, "\004\bf\0321.0799999999999912\000\341 "],
+        ].each do |obj, value, expected|
+          obj.send(:dump, value).should == expected
+        end
+      end
     #end
   end
 
@@ -167,17 +179,21 @@ describe "Marshal.dump" do
     it "dumps a Bignum" do
       [ [Marshal, -4611686018427387903,    "\004\bl-\t\377\377\377\377\377\377\377?"],
         [Marshal, -2361183241434822606847, "\004\bl-\n\377\377\377\377\377\377\377\377\177\000"],
-      ].should be_computed_by(:dump)
+      ].each do |obj, value, expected|
+        obj.send(:dump, value).should == expected
+      end
     end
 
     #ruby_version_is "1.9" do
-    #  it "dumps a Bignum" do
-    #    [ [Marshal,  2**64, "\004\bl+\n\000\000\000\000\000\000\000\000\001\000"],
-    #      [Marshal,  2**90, "\004\bl+\v#{"\000" * 11}\004"],
-    #      [Marshal, -2**63, "\004\bl-\t\000\000\000\000\000\000\000\200"],
-    #      [Marshal, -2**64, "\004\bl-\n\000\000\000\000\000\000\000\000\001\000"],
-    #    ].should be_computed_by(:dump)
-    #  end
+      it "dumps a Bignum" do
+        [ [Marshal,  2**64, "\004\bl+\n\000\000\000\000\000\000\000\000\001\000"],
+          [Marshal,  2**90, "\004\bl+\v#{"\000" * 11}\004"],
+          [Marshal, -2**63, "\004\bl-\t\000\000\000\000\000\000\000\200"],
+          [Marshal, -2**64, "\004\bl-\n\000\000\000\000\000\000\000\000\001\000"],
+        ].each do |obj, value, expected|
+          obj.send(:dump, value).should == expected
+        end
+      end
     #end
   end
 
@@ -207,51 +223,51 @@ describe "Marshal.dump" do
     end
 
     #with_feature :encoding do
-    #  it "dumps a US-ASCII String" do
-    #    str = "abc".force_encoding("us-ascii")
-    #    Marshal.dump(str).should == "\x04\bI\"\babc\x06:\x06EF"
-    #  end
-    #
-    #  it "dumps a UTF-8 String" do
-    #    str = "\x6d\xc3\xb6\x68\x72\x65".force_encoding("utf-8")
-    #    Marshal.dump(str).should == "\x04\bI\"\vm\xC3\xB6hre\x06:\x06ET"
-    #  end
-    #
-    #  it "dumps a String in another encoding" do
-    #    str = "\x6d\x00\xf6\x00\x68\x00\x72\x00\x65\x00".force_encoding("utf-16le")
-    #    result = "\x04\bI\"\x0Fm\x00\xF6\x00h\x00r\x00e\x00\x06:\rencoding\"\rUTF-16LE"
-    #    Marshal.dump(str).should == result
-    #  end
-    #
-    #  it "dumps multiple strings using symlinks for the :E (encoding) symbol" do
-    #    Marshal.dump(["".encode("us-ascii"), "".encode("utf-8")]).should == "\x04\b[\aI\"\x00\x06:\x06EFI\"\x00\x06;\x00T"
-    #  end
+      it "dumps a US-ASCII String" do
+        str = "abc".force_encoding("us-ascii")
+        Marshal.dump(str).should == "\x04\bI\"\babc\x06:\x06EF"
+      end
+
+      it "dumps a UTF-8 String" do
+        str = "\x6d\xc3\xb6\x68\x72\x65".force_encoding("utf-8")
+        Marshal.dump(str).should == "\x04\bI\"\vm\xC3\xB6hre\x06:\x06ET"
+      end
+
+      it "dumps a String in another encoding" do
+        str = "\x6d\x00\xf6\x00\x68\x00\x72\x00\x65\x00".force_encoding("utf-16le")
+        result = "\x04\bI\"\x0Fm\x00\xF6\x00h\x00r\x00e\x00\x06:\rencoding\"\rUTF-16LE"
+        Marshal.dump(str).should == result
+      end
+
+      #it "dumps multiple strings using symlinks for the :E (encoding) symbol" do
+      #  Marshal.dump(["".encode("us-ascii"), "".encode("utf-8")]).should == "\x04\b[\aI\"\x00\x06:\x06EFI\"\x00\x06;\x00T"
+      #end
     #end
   end
 
   describe "with a Regexp" do
     #ruby_version_is ""..."1.9" do
-    #  it "dumps a Regexp" do
-    #    Marshal.dump(/\A.\Z/).should == "\004\b/\n\\A.\\Z\000"
-    #  end
-    #
-    #  it "dumps a Regexp with flags" do
-    #    Marshal.dump(//im).should == "\x04\b/\000\005"
-    #  end
-    #
-    #  it "dumps a Regexp with instance variables" do
-    #    o = //
-    #    o.instance_variable_set(:@ivar, :ivar)
-    #    Marshal.dump(o).should == "\004\bI/\000\000\006:\n@ivar:\tivar"
-    #  end
-    #
-    #  it "dumps an extended Regexp" do
-    #    Marshal.dump(//.extend(Meths)).should == "\004\be:\nMeths/\000\000"
-    #  end
-    #
-    #  it "dumps a Regexp subclass" do
-    #    Marshal.dump(UserRegexp.new("")).should == "\004\bC:\017UserRegexp/\000\000"
-    #  end
+      it "dumps a Regexp" do
+        Marshal.dump(/\A.\Z/).should == "\004\b/\n\\A.\\Z\000"
+      end
+
+      it "dumps a Regexp with flags" do
+        Marshal.dump(//im).should == "\x04\b/\000\005"
+      end
+
+      it "dumps a Regexp with instance variables" do
+        o = //
+        o.instance_variable_set(:@ivar, :ivar)
+        Marshal.dump(o).should == "\004\bI/\000\000\006:\n@ivar:\tivar"
+      end
+
+      it "dumps an extended Regexp" do
+        Marshal.dump(//.extend(Meths)).should == "\004\be:\nMeths/\000\000"
+      end
+
+      it "dumps a Regexp subclass" do
+        Marshal.dump(UserRegexp.new("")).should == "\004\bC:\017UserRegexp/\000\000"
+      end
     #end
 
     #ruby_version_is "1.9" do
