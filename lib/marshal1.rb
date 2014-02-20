@@ -1,8 +1,114 @@
 require 'immediate'
 require 'bigdecimal'
+class Symbol
+  def is_constant?
+    self.to_s[0] =~ /^[A-Z]/
+  end
+end
 module Marshal1
   module Type
 
+    def self.convert_to_names(list)
+      list
+    end
+
+    def self.convert_to_name(sym)
+      sym
+    end
+
+    def self.coerce_to_symbol(obj)
+      return obj if obj.kind_of?(Symbol)
+
+      obj = obj.to_str if obj.respond_to?(:to_str)
+      coerce_to(obj, Symbol, :to_sym)
+    end
+
+    def self.coerce_to_constant_name(name)
+      name = Type.coerce_to_symbol(name)
+
+      unless name.is_constant?
+        raise NameError, "wrong constant name #{name}"
+      end
+
+      name
+    end
+
+    def self.const_exists?(mod, name, inherit = true)
+      name = coerce_to_constant_name name
+
+      current = mod
+
+      while current
+        if index = current.constants.index(name)#current.constants.index(name)#current.constant_table.lookup(name)
+          return !!index
+        end
+
+        return false unless inherit
+
+        current = current.superclass
+      end
+
+      if instance_of?(Module)
+        if index = Object.constants.index(name)
+          return !!index
+        end
+      end
+
+      false
+    end
+
+    def const_lookup(name, type = nil)
+      mod = Object
+
+      parts = String(name).split '::'
+      parts.each do |part|
+        unless Type.const_exists?(mod, part)
+          raise ArgumentError, "undefined class/module #{name}"
+        end
+
+        mod = Type.const_get(mod, part, false)
+      end
+
+      if type and not mod.instance_of? type
+        raise ArgumentError, "#{name} does not refer to a #{type}"
+      end
+
+      mod
+    end
+
+    def self.const_get(mod, name, inherit=true)
+      unless name.kind_of?(Symbol)
+        name =  Type.coerce_to(name,String, :to_str)#StringValue(name)
+        return const_lookup mod, name, inherit if name.index '::' and name.size > 2
+      end
+
+      name = coerce_to_constant_name name
+
+      current, constant = mod, nil
+
+      while current
+        if constant = current.const_get(name)
+
+          #constant = constant.call(current) if constant.kind_of?(Autoload)
+          return constant
+        end
+
+        unless inherit
+          return mod.const_missing(name)
+        end
+
+        current = current.superclass
+      end
+
+      if instance_of?(Module)
+        if constant = Object.constant_get(name)
+          #constant = constant.call(current) if constant.kind_of?(Autoload)
+          return constant
+        end
+      end
+
+      mod.const_missing(name)
+    end
   end
 end
 
@@ -116,7 +222,7 @@ end
 class Symbol
   def __marshal__(ms)
     if idx = ms.find_symlink(self)
-      Type.binary_string(";#{ms.serialize_integer(idx)}")
+      Marshal1::Type.binary_string(";#{ms.serialize_integer(idx)}")
     else
       ms.add_symlink self
       ms.serialize_symbol(self)
@@ -168,6 +274,84 @@ class Regexp
   end
 end
 
+class Array
+  def __marshal__(ms)
+    out =  ms.serialize_instance_variables_prefix(self)
+    out << ms.serialize_extended_object(self)
+    out << ms.serialize_user_class(self, Array)
+    out << "["
+    out << ms.serialize_integer(self.length)
+    unless empty?
+      each do |element|
+        out << ms.serialize(element)
+      end
+    end
+    out << ms.serialize_instance_variables_suffix(self)
+
+    out
+  end
+end
+
+class Hash
+  def __marshal__(ms)
+    raise TypeError, "can't dump hash with default proc" if default_proc
+
+    exclude_syms = %w[
+      @capacity @mask @max_entries @size @entries @default_proc @default
+      @state @compare_by_identity @head @tail @table
+    ].map { |a| a.to_sym }
+    excluded_ivars = Marshal1::Type.convert_to_names exclude_syms
+
+    out =  ms.serialize_instance_variables_prefix(self, excluded_ivars)
+    out << ms.serialize_extended_object(self)
+    out << ms.serialize_user_class(self, Hash)
+    out << (self.default ? "}" : "{")
+    out << ms.serialize_integer(length)
+    unless empty?
+      each_pair do |key, val|
+        out << ms.serialize(key)
+        out << ms.serialize(val)
+      end
+    end
+    out << (self.default ? ms.serialize(self.default) : '')
+    out << ms.serialize_instance_variables_suffix(self, false, false,
+                                                  excluded_ivars)
+
+    out
+  end
+end
+
+class Range
+  def __marshal__(ms)
+    super(ms, true)
+  end
+end
+
+class Struct
+  def __marshal__(ms)
+    #attr_syms = _attrs.map { |a| "@#{a}".to_sym }
+    attr_syms = members.map { |a| "@#{a}".to_sym } #todo: make it safe
+    exclude = Marshal1::Type.convert_to_names attr_syms
+
+    out =  ms.serialize_instance_variables_prefix(self, exclude)
+    out << ms.serialize_extended_object(self)
+
+    out << "S"
+
+    out << ms.serialize(self.class.name.to_sym)
+    out << ms.serialize_integer(self.length)
+
+    self.each_pair do |name, value|
+      out << ms.serialize(name)
+      out << ms.serialize(value)
+    end
+
+    out << ms.serialize_instance_variables_suffix(self, false, false, exclude)
+
+    out
+  end
+end
+
 
 class Fixnum
   def __marshal__(ms)
@@ -178,6 +362,26 @@ end
 class Bignum
   def __marshal__(ms)
     ms.serialize_bignum(self)
+  end
+end
+
+class Time
+  def self.__construct__(ms, data, ivar_index, has_ivar)
+    obj = _load(data)
+    ms.store_unique_object obj
+
+    if ivar_index and has_ivar[ivar_index]
+      ms.set_instance_variables obj
+      has_ivar[ivar_index] = false
+    end
+
+    nano_num = obj.instance_variable_get(:@nano_num)
+    nano_den = obj.instance_variable_get(:@nano_den)
+    if nano_num && nano_den
+      obj.send(:nsec=, Rational(nano_num, nano_den).to_i)
+    end
+
+    obj
   end
 end
 
@@ -375,6 +579,44 @@ module Marshal1
       @stream.tainted? && !obj.frozen? ? obj.taint : obj
     end
 
+    def const_lookup(name, type = nil)
+      mod = Object
+
+      parts = String(name).split '::'
+      parts.each do |part|
+        unless Type.const_exists?(mod, part)
+          raise ArgumentError, "undefined class/module #{name}"
+        end
+
+        mod = Type.const_get(mod, part, false)
+      end
+
+      if type and not mod.instance_of? type
+        raise ArgumentError, "#{name} does not refer to a #{type}"
+      end
+
+      mod
+    end
+
+    def construct_class
+      byte_sequence = get_byte_sequence
+      obj = const_lookup(byte_sequence.to_sym, Class)
+      store_unique_object obj
+      obj
+    end
+
+    def construct_module
+      obj = const_lookup(get_byte_sequence.to_sym, Module)
+      store_unique_object obj
+      obj
+    end
+
+    def construct_old_module
+      obj = const_lookup(get_byte_sequence.to_sym)
+      store_unique_object obj
+      obj
+    end
+
     def construct_integer
       c = consume_byte()
 
@@ -434,6 +676,11 @@ module Marshal1
       @symlinks[obj.__id__]
     end
 
+    def get_byte_sequence
+      size = construct_integer
+      consume size
+    end
+
     def serialize(obj)
       raise ArgumentError, "exceed depth limit" if @depth == 0
 
@@ -461,7 +708,7 @@ module Marshal1
     end
 
     def serialize_encoding?(obj)
-      if obj.is_a? String
+      if obj.respond_to? :encoding
         enc = obj.encoding
         enc && enc != Encoding::BINARY
       end
@@ -708,6 +955,9 @@ module Marshal1
 
     def self.infect(host, source)
       host.taint if source.tainted?
+      if source.untrusted?
+        host.untrust
+      end
       host
     end
 
@@ -772,6 +1022,7 @@ module Marshal1
       end
 
       str = Type.binary_string(VERSION_STRING) + ms.serialize(obj)
+      Type.infect(str,obj)
 
       if an_io
         an_io.write(str)

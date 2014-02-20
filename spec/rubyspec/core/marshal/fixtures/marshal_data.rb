@@ -155,7 +155,7 @@ Struct.new "Useful", :a, :b
 
 module MarshalSpec
   class BasicObjectSubWithRespondToFalse
-    def respond_to?(a)
+    def respond_to?(a,  include_all=false)
       false
     end
   end
