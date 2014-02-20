@@ -2,6 +2,8 @@
 
 TODO: Write a gem description
 
+some Ruby's implementation, in order to contribute to various Ruby's implementation like Opal etc.
+
 ## Installation
 
 Add this line to your application's Gemfile:
