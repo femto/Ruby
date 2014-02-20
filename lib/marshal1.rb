@@ -487,6 +487,10 @@ module Marshal1
       @symlinks[obj.__id__] = sz
     end
 
+    def call(obj)
+      @proc.call obj if @proc and @call
+    end
+
     def construct(ivar_index = nil, call_proc = true)
       type = consume_byte()
       obj = case type
@@ -574,7 +578,9 @@ module Marshal1
                 raise ArgumentError, "load error, unknown type #{type}"
             end
 
-      call obj if @proc and call_proc
+      if @proc and call_proc
+        call obj
+      end
 
       @stream.tainted? && !obj.frozen? ? obj.taint : obj
     end
@@ -662,7 +668,25 @@ module Marshal1
               [klass, slot, members[i]]
         end
 
-        obj.instance_variable_set "@#{slot}", construct
+        #obj.instance_variable_set "@#{slot}", construct
+        obj.send("#{slot}=", construct)
+      end
+
+      obj
+    end
+
+    def construct_object
+      name = get_symbol
+      klass = const_lookup name, Class
+      obj = klass.allocate
+
+      raise TypeError, 'dump format error' unless Object === obj
+
+      store_unique_object obj
+      if obj.kind_of?(Exception)
+        set_exception_variables obj
+      else
+        set_instance_variables obj
       end
 
       obj
@@ -712,6 +736,57 @@ module Marshal1
       #Rubinius.privately do
         obj.marshal_load data
       #end
+
+      obj
+    end
+
+    def construct_data
+      name = get_symbol
+      klass = const_lookup name, Class
+      store_unique_object klass
+
+      obj = klass.allocate
+
+      # TODO ensure obj is a wrapped C pointer (T_DATA in MRI-land)
+
+      store_unique_object obj
+
+      unless obj.respond_to?(:_load_data)
+        raise TypeError,
+              "class #{name} needs to have instance method `_load_data'"
+      end
+
+      obj._load_data construct
+
+      obj
+    end
+
+    def construct_hash
+      obj = @user_class ? get_user_class.allocate : {}
+      store_unique_object obj
+
+      construct_integer.times do
+        key = construct
+        val = construct
+
+        # Use __store__ (an alias for []=) to get around subclass overrides
+        obj.store key, val #todo, make it safe
+      end
+
+      obj
+    end
+
+    def construct_hash_def
+      obj = @user_class ? get_user_class.allocate : {}
+      store_unique_object obj
+
+      construct_integer.times do
+        key = construct
+        val = construct
+        obj[key] = val
+      end
+
+      obj.default = construct
 
       obj
     end
@@ -776,7 +851,7 @@ module Marshal1
       if @user_class
         cls = get_user_class()
         if cls < Array
-          Rubinius::Unsafe.set_class obj, cls
+          obj = cls.allocate
         else
           # This is what MRI does, it's weird.
           return cls.allocate
@@ -784,7 +859,7 @@ module Marshal1
       end
 
       construct_integer.times do |i|
-        obj << construct #todo: make if safe
+        obj[obj.size] = construct #todo: make if safe
       end
 
       obj
