@@ -608,15 +608,17 @@ describe Marshal1 do
        "\004\bi\004\0",
        "\004\bi\004\0\0",
        "\004\bi\004\0\0\0"].each do |invalid|
-        lambda { Marshal.send(@method, invalid) }.should raise_error(ArgumentError)
+        lambda {
+          Marshal.send(@method, invalid)
+        }.should raise_error(ArgumentError)
       end
     end
 
-    if 0.size == 8 # for platforms like x86_64
+    #if 0.size == 8 # for platforms like x86_64
       it "roundtrips 4611686018427387903 from dump/load correctly" do
         Marshal.send(@method, Marshal.dump(4611686018427387903)).should == 4611686018427387903
       end
-    end
+    #end
   end
 
   describe "for nil" do

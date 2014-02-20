@@ -579,6 +579,235 @@ module Marshal1
       @stream.tainted? && !obj.frozen? ? obj.taint : obj
     end
 
+    def set_instance_variables(obj)
+      construct_integer.times do
+        ivar = get_symbol
+        value = construct
+
+        case ivar
+          when :E
+            if value
+              set_object_encoding obj, Encoding::UTF_8
+            else
+              set_object_encoding obj, Encoding::US_ASCII
+            end
+            next
+          when :encoding
+            if enc = Encoding.find(value)
+              set_object_encoding obj, enc
+              next
+            end
+        end
+
+        obj.instance_variable_set prepare_ivar(ivar), value #todo, make it safe
+      end
+    end
+
+    def prepare_ivar(ivar)
+      ivar.to_s =~ /\A@/ ? ivar : "@#{ivar}".to_sym
+    end
+
+    def get_symbol
+      type = consume_byte()
+
+      case type
+        when 58 # TYPE_SYMBOL
+          @call = false
+          obj = construct_symbol
+          @call = true
+          obj
+        when 59 # TYPE_SYMLINK
+          num = construct_integer
+          @symbols[num]
+        else
+          raise ArgumentError, "expected TYPE_SYMBOL or TYPE_SYMLINK, got #{type.inspect}"
+      end
+    end
+
+    def construct_float
+      s = get_byte_sequence
+
+      if s == "nan"
+        obj = 0.0 / 0.0
+      elsif s == "inf"
+        obj = 1.0 / 0.0
+      elsif s == "-inf"
+        obj = 1.0 / -0.0
+      else
+        obj = s.to_f
+      end
+
+      store_unique_object obj
+
+      obj
+    end
+
+    def construct_struct
+      symbols = []
+      values = []
+
+      name = get_symbol
+      store_unique_object name
+
+      klass = const_lookup name, Class
+      members = klass.members
+
+      obj = klass.allocate
+      store_unique_object obj
+
+      construct_integer.times do |i|
+        slot = get_symbol
+        unless members[i].intern == slot
+          raise TypeError, "struct %s is not compatible (%p for %p)" %
+              [klass, slot, members[i]]
+        end
+
+        obj.instance_variable_set "@#{slot}", construct
+      end
+
+      obj
+    end
+
+    def construct_user_defined(ivar_index)
+      name = get_symbol
+      klass = const_lookup name, Class
+
+      data = get_byte_sequence
+
+      if klass.respond_to?(:__construct__)
+        return klass.__construct__(self, data, ivar_index, @has_ivar)
+      end
+
+      if ivar_index and @has_ivar[ivar_index]
+        set_instance_variables data
+        @has_ivar[ivar_index] = false
+      end
+
+      obj = nil
+      #Rubinius.privately do
+        obj = klass._load data
+      #end
+
+      store_unique_object obj
+
+      obj
+    end
+
+    def construct_user_marshal
+      name = get_symbol
+      store_unique_object name
+
+      klass = const_lookup name, Class
+      obj = klass.allocate
+
+      extend_object obj if @modules
+
+      unless obj.respond_to?(:marshal_load, true)
+        raise TypeError, "instance of #{klass} needs to have method `marshal_load'"
+      end
+
+      store_unique_object obj
+
+      data = construct
+      #Rubinius.privately do
+        obj.marshal_load data
+      #end
+
+      obj
+    end
+
+    def construct_symbol
+      obj = get_byte_sequence.to_sym
+      store_unique_object obj
+
+      obj
+    end
+
+    def set_object_encoding(obj, enc)
+      case obj
+        when String
+          obj.force_encoding enc
+        when Regexp
+          obj.source.force_encoding enc
+        when Symbol
+          # TODO
+      end
+    end
+
+    def get_user_class
+      cls = const_lookup @user_class, Class
+      @user_class = nil
+      cls
+    end
+
+    def extend_object(obj)
+      obj.extend(@modules.pop) until @modules.empty? #todo: make if safe
+    end
+
+    def construct_string
+      obj = get_byte_sequence
+      #obj.class = get_user_class if @user_class
+      #if @user_class
+      #  obj = get_user_class.new s
+      #else
+      #  obj
+      #end
+
+      set_object_encoding(obj, Encoding::ASCII_8BIT)
+
+      store_unique_object obj
+    end
+
+    def construct_regexp
+      s = get_byte_sequence
+      if @user_class
+        obj = get_user_class.new s, consume_byte
+      else
+        obj = Regexp.new s, consume_byte
+      end
+
+      store_unique_object obj
+    end
+
+    def construct_array
+      obj = []
+      store_unique_object obj
+
+      if @user_class
+        cls = get_user_class()
+        if cls < Array
+          Rubinius::Unsafe.set_class obj, cls
+        else
+          # This is what MRI does, it's weird.
+          return cls.allocate
+        end
+      end
+
+      construct_integer.times do |i|
+        obj << construct #todo: make if safe
+      end
+
+      obj
+    end
+
+
+
+    def construct_bignum
+      sign = consume_byte() == 45 ? -1 : 1  # ?-
+      size = construct_integer * 2
+
+      result = 0
+
+      data = consume size
+      (0...size).each do |exp|
+        result += (data.getbyte(exp) * 2**(exp*8))
+      end
+
+      obj = result * sign
+
+      store_unique_object obj
+    end
+
     def const_lookup(name, type = nil)
       mod = Object
 
@@ -915,14 +1144,14 @@ module Marshal1
     end
 
     def consume(bytes)
-      #raise ArgumentError, "marshal data too short" if @consumed > @stream.bytesize
+      raise ArgumentError, "marshal data too short" if @consumed > @stream.bytesize
       data = @stream.byteslice @consumed, bytes
       @consumed += bytes
       data
     end
 
     def consume_byte
-      #raise ArgumentError, "marshal data too short" if @consumed >= @stream.bytesize
+      raise ArgumentError, "marshal data too short" if @consumed >= @stream.bytesize
       data = @byte_array[@consumed]
       @consumed += 1
       return data
