@@ -73,6 +73,22 @@ module Opal
       [:expr_arg, :expr_cmdarg].include? @lex_state
     end
 
+    def cond_push(n)
+      @cond = (@cond << 1) | (n & 1)
+    end
+
+    def cmdarg_push(n)
+      @cmdarg = (@cmdarg << 1) | (n & 1)
+    end
+
+    def cond_lexpop
+      @cond = (@cond >> 1) | (@cond & 1)
+    end
+
+    def cmdarg_lexpop
+      @cmdarg = (@cmdarg >> 1) | (@cmdarg & 1)
+    end
+
     def set_arg_state
       @lex_state = after_operator? ? :expr_arg : :expr_beg
     end
@@ -692,6 +708,8 @@ module Opal
         raise "Unexpected content in parsing stream `#{scanner.peek 5}` :#{@file}:#{@line}"
       end
     end
+
+
 
     def process_numeric
       @lex_state = :expr_end
