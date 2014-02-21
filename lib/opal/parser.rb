@@ -75,6 +75,14 @@ module Opal
       s1(:identifier, value(tok).to_sym, source(tok))
     end
 
+    #def new_paren(open, expr, close)
+    #  if expr.nil? or expr == [:block]
+    #    s1(:paren, s0(:nil, source(open)), source(open))
+    #  else
+    #    s1(:paren, expr, source(open))
+    #  end
+    #end
+
     def new_ivar(tok)
       s1(:ivar, value(tok).to_sym, source(tok))
     end
