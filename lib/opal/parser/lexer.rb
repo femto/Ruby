@@ -103,6 +103,11 @@ module Opal
       result
     end
 
+    def line=(line)
+      @column = @tok_column = 0
+      @line = @tok_line = line
+    end
+
 
     def yylex
       @yylval = ''

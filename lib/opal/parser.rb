@@ -146,6 +146,27 @@ module Opal
       s0(:self, source(tok))
     end
 
+    def new_break(kw, args=nil)
+      if args.nil?
+        sexp = s(:break)
+      elsif args.length == 1
+        sexp = s(:break, args[0])
+      else
+        sexp = s(:break, s(:array, *args))
+      end
+
+      sexp
+    end
+
+    def add_block_pass(arglist, block)
+      arglist << block if block
+      arglist
+    end
+
+    def new_splat(tok, value)
+      s1(:splat, value, source(tok))
+    end
+
 
 
     def new_compstmt(block)
