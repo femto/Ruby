@@ -1,6 +1,24 @@
 require 'opal/parser/keywords'
 module Opal
   class Lexer
+
+    STR_FUNC_ESCAPE = 0x01
+    STR_FUNC_EXPAND = 0x02
+    STR_FUNC_REGEXP = 0x04
+    STR_FUNC_QWORDS = 0x08
+    STR_FUNC_SYMBOL = 0x10
+    STR_FUNC_INDENT = 0x20
+    STR_FUNC_XQUOTE = 0x40
+
+    STR_SQUOTE = 0x00
+    STR_DQUOTE = STR_FUNC_EXPAND
+    STR_XQUOTE = STR_FUNC_EXPAND | STR_FUNC_XQUOTE
+    STR_REGEXP = STR_FUNC_REGEXP | STR_FUNC_ESCAPE | STR_FUNC_EXPAND
+    STR_SWORD  = STR_FUNC_QWORDS
+    STR_DWORD  = STR_FUNC_QWORDS | STR_FUNC_EXPAND
+    STR_SSYM   = STR_FUNC_SYMBOL
+    STR_DSYM   = STR_FUNC_SYMBOL | STR_FUNC_EXPAND
+
     attr_reader :line
     attr_reader :scope
     attr_reader :eof_content
@@ -10,6 +28,9 @@ module Opal
     attr_accessor :scanner
     attr_accessor :yylval
     attr_accessor :parser
+
+
+
     def initialize(source, file)
       @lex_state  = :expr_beg
       @cond       = 0
@@ -89,8 +110,16 @@ module Opal
       @cmdarg = (@cmdarg >> 1) | (@cmdarg & 1)
     end
 
+    def cmdarg_pop
+      @cmdarg = @cmdarg >> 1
+    end
+
     def set_arg_state
       @lex_state = after_operator? ? :expr_arg : :expr_beg
+    end
+
+    def new_strterm(func, term, paren)
+      { :type => :string, :func => func, :term => term, :paren => paren }
     end
 
 
@@ -107,6 +136,193 @@ module Opal
       @column = @tok_column = 0
       @line = @tok_line = line
     end
+
+    def pushback(n)
+      @scanner.pos -= n
+    end
+
+    def parse_string
+      str_parse = self.strterm
+      func = str_parse[:func]
+
+      space = false
+
+      qwords = (func & STR_FUNC_QWORDS) != 0
+      expand = (func & STR_FUNC_EXPAND) != 0
+      regexp = (func & STR_FUNC_REGEXP) != 0
+
+      space = true if qwords and scan(/\s+/)
+
+      # if not end of string, so we must be parsing contents
+      str_buffer = []
+
+      if scan Regexp.new(Regexp.escape(str_parse[:term]))
+        if qwords && !str_parse[:done_last_space]#&& space
+          str_parse[:done_last_space] = true
+          pushback(1)
+          self.yylval = ' '
+          return :tSPACE
+        end
+
+        if str_parse[:balance]
+          if str_parse[:nesting] == 0
+
+            if regexp
+              self.yylval = scan(/\w+/)
+              return :tREGEXP_END
+            end
+            return :tSTRING_END
+          else
+            str_buffer << scanner.matched
+            str_parse[:nesting] -= 1
+            self.strterm = str_parse
+          end
+        elsif regexp
+          @lex_state = :expr_end
+          self.yylval = scan(/\w+/)
+          return :tREGEXP_END
+        else
+          if str_parse[:scanner]
+            @scanner_stack << str_parse[:scanner]
+            @scanner = str_parse[:scanner]
+          end
+
+          return :tSTRING_END
+        end
+      end
+
+      if space
+        self.yylval = ' '
+        return :tSPACE
+      end
+
+      if str_parse[:balance] and scan Regexp.new(Regexp.escape(str_parse[:paren]))
+        str_buffer << scanner.matched
+        str_parse[:nesting] += 1
+      elsif check(/#[@$]/)
+        scan(/#/)
+        if expand
+          return :tSTRING_DVAR
+        else
+          str_buffer << scanner.matched
+        end
+
+      elsif scan(/#\{/)
+        if expand
+          return :tSTRING_DBEG
+        else
+          str_buffer << scanner.matched
+        end
+
+        # causes error, so we will just collect it later on with other text
+      elsif scan(/\#/)
+        str_buffer << '#'
+      end
+
+      add_string_content str_buffer, str_parse
+
+      complete_str = str_buffer.join ''
+      @line += complete_str.count("\n")
+
+      self.yylval = complete_str
+      return :tSTRING_CONTENT
+    end
+
+    def add_string_content(str_buffer, str_parse)
+      func = str_parse[:func]
+
+      end_str_re = Regexp.new(Regexp.escape(str_parse[:term]))
+
+      qwords = (func & STR_FUNC_QWORDS) != 0
+      expand = (func & STR_FUNC_EXPAND) != 0
+      regexp = (func & STR_FUNC_REGEXP) != 0
+      escape = (func & STR_FUNC_ESCAPE) != 0
+      xquote = (func == STR_XQUOTE)
+
+      until scanner.eos?
+        c = nil
+        handled = true
+
+        if check end_str_re
+          # eos
+          # if its just balancing, add it ass normal content..
+          if str_parse[:balance] && (str_parse[:nesting] != 0)
+            # we only checked above, so actually scan it
+            scan end_str_re
+            c = scanner.matched
+            str_parse[:nesting] -= 1
+          else
+            # not balancing, so break (eos!)
+            break
+          end
+
+        elsif str_parse[:balance] and scan Regexp.new(Regexp.escape(str_parse[:paren]))
+          str_parse[:nesting] += 1
+          c = scanner.matched
+
+        elsif qwords && scan(/\s/)
+          pushback(1)
+          break
+        elsif expand && check(/#(?=[\$\@\{])/)
+          break
+        elsif qwords and scan(/\s/)
+          pushback(1)
+          break
+        elsif scan(/\\/)
+          if xquote # opal - treat xstrings as dquotes? forces us to double escape
+            c = "\\" + scan(/./)
+          elsif qwords and scan(/\n/)
+            str_buffer << "\n"
+            next
+          elsif expand and scan(/\n/)
+            next
+          elsif qwords and scan(/\s/)
+            c = ' '
+          elsif regexp
+            if scan(/(.)/)
+              c = "\\" + scanner.matched
+            end
+          elsif expand
+            c = self.read_escape
+          elsif scan(/\n/)
+            # nothing..
+          elsif scan(/\\/)
+            if escape
+              c = "\\\\"
+            else
+              c = scanner.matched
+            end
+          else # \\
+            unless scan(end_str_re)
+              str_buffer << "\\"
+            else
+              #c = scanner.matched
+            end
+          end
+        else
+          handled = false
+        end
+
+        unless handled
+          reg = if qwords
+                  Regexp.new("[^#{Regexp.escape str_parse[:term]}\#\0\n\ \\\\]+|.")
+                elsif str_parse[:balance]
+                  Regexp.new("[^#{Regexp.escape str_parse[:term]}#{Regexp.escape str_parse[:paren]}\#\0\\\\]+|.")
+                else
+                  Regexp.new("[^#{Regexp.escape str_parse[:term]}\#\0\\\\]+|.")
+                end
+
+          scan reg
+          c = scanner.matched
+        end
+
+        c ||= scanner.matched
+        str_buffer << c
+      end
+
+      raise "reached EOF while in string" if scanner.eos?
+    end
+
 
 
     def yylex

@@ -13,7 +13,7 @@ module Opal
       @lexer = Lexer.new(source, file)
       @lexer.parser = self
 
-      #@yydebug = true
+      @yydebug = true
 
       self.parse_to_sexp
     end
@@ -176,6 +176,23 @@ module Opal
       s1(:const, value(tok).to_sym, source(tok))
     end
 
+    def new_call(recv, meth, args = nil)
+      args ||= []
+      sexp = s(:call, recv, value(meth).to_sym, s(:arglist, *args))
+      sexp.source = source(meth)
+      sexp
+    end
+
+    def new_binary_call(recv, meth, arg)
+      new_call(recv, meth, [arg])
+    end
+
+    def new_unary_call(op, recv)
+      new_call(recv, op, [])
+    end
+
+
+
     def new_assignable(ref)
       case ref.type
         when :ivar
@@ -239,6 +256,38 @@ module Opal
 
     def new_sym(tok)
       s1(:sym, value(tok).to_sym, source(tok))
+    end
+
+    def new_regexp(reg, ending)
+      return s(:regexp, '') unless reg
+      case reg.type
+        when :str
+          s(:regexp, reg[1], value(ending))
+        when :evstr
+          s(:dregx, "", reg)
+        when :dstr
+          reg.type = :dregx
+          reg
+      end
+    end
+
+    def str_append(str, str2)
+      return str2 unless str
+      return str unless str2
+
+      if str.type == :evstr
+        str = s(:dstr, "", str)
+      elsif str.type == :str
+        str = s(:dstr, str[1])
+      else
+        #puts str.type
+      end
+      str << str2
+      str
+    end
+
+    def new_str_content(tok)
+      s1(:str, value(tok), source(tok))
     end
   end
 end
