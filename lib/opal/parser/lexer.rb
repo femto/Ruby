@@ -53,8 +53,24 @@ module Opal
       [:expr_fname, :expr_dot].include? @lex_state
     end
 
+    def beg?
+      [:expr_beg, :expr_value, :expr_mid, :expr_class].include? @lex_state
+    end
+
     def end?
       [:expr_end, :expr_endarg, :expr_endfn].include? @lex_state
+    end
+
+    def spcarg?
+      arg? and @space_seen and !space?
+    end
+
+    def space?
+      @scanner.check(/\s/)
+    end
+
+    def arg?
+      [:expr_arg, :expr_cmdarg].include? @lex_state
     end
 
     def set_arg_state
@@ -677,6 +693,29 @@ module Opal
       end
     end
 
+    def process_numeric
+      @lex_state = :expr_end
+
+      if scan(/0b?(0|1|_)+/)
+        self.yylval = scanner.matched.to_i(2)
+        return :tINTEGER
+      elsif scan(/0o?([0-7]|_)+/)
+        self.yylval = scanner.matched.to_i(8)
+        return :tINTEGER
+      elsif scan(/[\d_]+\.[\d_]+\b|[\d_]+(\.[\d_]+)?[eE][-+]?[\d_]+\b/)
+        self.yylval = scanner.matched.gsub(/_/, '').to_f
+        return :tFLOAT
+      elsif scan(/[\d_]+\b/)
+        self.yylval = scanner.matched.gsub(/_/, '').to_i
+        return :tINTEGER
+      elsif scan(/0(x|X)(\d|[a-f]|[A-F]|_)+/)
+        self.yylval = scanner.matched.to_i(16)
+        return :tINTEGER
+      else
+        raise "Lexing error on numeric type: `#{scanner.peek 5}`"
+      end
+    end
+
     def process_identifier(matched, cmd_start)
       last_state = @lex_state
 
@@ -773,6 +812,10 @@ module Opal
       end
 
       return matched =~ /^[A-Z]/ ? :tCONSTANT : :tIDENTIFIER
+    end
+
+    def has_local?(local)
+      parser.scope.has_local?(local.to_sym)
     end
 
 

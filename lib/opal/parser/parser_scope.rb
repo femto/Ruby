@@ -11,5 +11,11 @@ module Opal
       @parent = nil
     end
 
+    def has_local?(local)
+      return true if @locals.include? local
+      return @parent.has_local?(local) if @parent and @block
+      false
+    end
+
   end
 end
