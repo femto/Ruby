@@ -13,6 +13,8 @@ module Opal
       @lexer = Lexer.new(source, file)
       @lexer.parser = self
 
+      #@yydebug = true
+
       self.parse_to_sexp
     end
 
@@ -156,6 +158,42 @@ module Opal
       end
 
       sexp
+    end
+
+    def new_body(compstmt, res, els, ens)
+      s = compstmt || s(:block)
+
+      if res
+        s = s(:rescue, s)
+        res.each { |r| s << r }
+        s << els if els
+      end
+
+      ens ? s(:ensure, s, ens) : s
+    end
+
+    def new_const(tok)
+      s1(:const, value(tok).to_sym, source(tok))
+    end
+
+    def new_assignable(ref)
+      case ref.type
+        when :ivar
+          ref.type = :iasgn
+        when :const
+          ref.type = :cdecl
+        when :identifier
+          scope.add_local ref[1] unless scope.has_local? ref[1]
+          ref.type = :lasgn
+        when :gvar
+          ref.type = :gasgn
+        when :cvar
+          ref.type = :cvdecl
+        else
+          raise "Bad new_assignable type: #{ref.type}"
+      end
+
+      ref
     end
 
     def add_block_pass(arglist, block)
