@@ -130,6 +130,12 @@ module Opal
       res
     end
 
+    def new_if(if_tok, expr, stmt, tail)
+      sexp = s(:if, expr, stmt, tail)
+      sexp.source = source(if_tok)
+      sexp
+    end
+
     def new_colon2(lhs, tok, name)
       sexp = s(:colon2, lhs, value(name).to_sym)
       sexp.source = source(tok)

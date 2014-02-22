@@ -16,6 +16,7 @@ describe "The if keyword" do
 
   it "returns a simple s(:if) with nil else body for prefix if statement" do
     parsed("1 if 2").should == [:if, [:int, 2], [:int, 1], nil]
+    #parsed("1 rescue 2").should == [:if, [:int, 2], [:int, 1], nil]
   end
 end
 
