@@ -3,8 +3,11 @@ require File.expand_path('../../spec_helper', __FILE__)
 describe "Iters" do
   describe "Iter on a command" do
     it "the outer command call gets the iter" do
-      parsed("a b do; end").should == [:call, nil, :a, [:arglist, [:call, nil, :b, [:arglist]]], [:iter, nil]]
-      parsed("a 1, b do; end").should == [:call, nil, :a, [:arglist, [:int, 1], [:call, nil, :b, [:arglist]]], [:iter, nil]]
+      #parsed("a do; end").should == [:call, nil, :a, [:arglist], [:iter, nil]]
+      #parsed("a b do; end").should == [:call, nil, :a, [:arglist, [:call, nil, :b, [:arglist]]], [:iter, nil]]
+
+      #parsed("a 1, b do; end").should == [:call, nil, :a, [:arglist, [:int, 1], [:call, nil, :b, [:arglist]]], [:iter, nil]]
+      parsed("while 1 do; end").should == [:while, [:int, 1], nil]
     end
   end
 

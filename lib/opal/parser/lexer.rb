@@ -98,12 +98,20 @@ module Opal
       @cond = (@cond << 1) | (n & 1)
     end
 
-    def cmdarg_push(n)
-      @cmdarg = (@cmdarg << 1) | (n & 1)
-    end
-
     def cond_lexpop
       @cond = (@cond >> 1) | (@cond & 1)
+    end
+
+    def cond_pop
+      @cond = @cond >> 1
+    end
+
+    def cond?
+      (@cond & 1) != 0
+    end
+
+    def cmdarg_push(n)
+      @cmdarg = (@cmdarg << 1) | (n & 1)
     end
 
     def cmdarg_lexpop
@@ -112,6 +120,10 @@ module Opal
 
     def cmdarg_pop
       @cmdarg = @cmdarg >> 1
+    end
+
+    def cmdarg?
+      (@cmdarg & 1) != 0
     end
 
     def set_arg_state

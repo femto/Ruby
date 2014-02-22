@@ -295,6 +295,8 @@ module Opal
 
 
 
+
+
     def new_compstmt(block)
       comp = if block.size == 1
                nil
@@ -317,6 +319,13 @@ module Opal
       sexp = s(:block)
       sexp << stmt if stmt
       sexp
+    end
+
+    def new_iter(args, body)
+      args ||= nil
+      s = s(:iter, args)
+      s << body if body
+      s
     end
 
     def new_alias(kw, new, old)
