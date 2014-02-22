@@ -89,6 +89,47 @@ module Opal
       sexp
     end
 
+    def new_def(kw, recv, name, args, body, end_tok)
+      body = s(:block, body) if body.type != :block
+      body << s(:nil) if body.size == 1
+
+      sexp = s(:def, recv, value(name).to_sym, args, body)
+      sexp.source = source(kw)
+      sexp
+    end
+
+    def new_args(norm, opt, rest, block)
+      res = s(:args)
+
+      if norm
+        norm.each do |arg|
+          scope.add_local arg
+          res << arg
+        end
+      end
+
+      if opt
+        opt[1..-1].each do |_opt|
+          res << _opt[1]
+        end
+      end
+
+      if rest
+        res << rest
+        rest_str = rest.to_s[1..-1]
+        scope.add_local rest_str.to_sym unless rest_str.empty?
+      end
+
+      if block
+        res << block
+        scope.add_local block.to_s[1..-1].to_sym
+      end
+
+      res << opt if opt
+
+      res
+    end
+
     def new_colon2(lhs, tok, name)
       sexp = s(:colon2, lhs, value(name).to_sym)
       sexp.source = source(tok)
