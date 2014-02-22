@@ -32,5 +32,9 @@ module Opal
 
     alias eql? ==
 
+    def inspect
+      @array.inspect
+    end
+
   end
 end

@@ -6,8 +6,11 @@ describe "Iters" do
       #parsed("a do; end").should == [:call, nil, :a, [:arglist], [:iter, nil]]
       #parsed("a b do; end").should == [:call, nil, :a, [:arglist, [:call, nil, :b, [:arglist]]], [:iter, nil]]
 
+      parsed("a {}").should == [:call, nil, :a, [:arglist, [:call, nil, :b, [:arglist]]], [:iter, nil]]
+      #parsed("a b {}").should == [:call, nil, :a, [:arglist, [:call, nil, :b, [:arglist]]], [:iter, nil]]
+
       #parsed("a 1, b do; end").should == [:call, nil, :a, [:arglist, [:int, 1], [:call, nil, :b, [:arglist]]], [:iter, nil]]
-      parsed("while 1 do; end").should == [:while, [:int, 1], nil]
+      #parsed("while 1 do; end").should == [:while, [:int, 1], nil]
     end
   end
 
