@@ -83,6 +83,22 @@ module Opal
       end
     end
 
+    def new_class(start, path, sup, body, endt)
+      sexp = s(:class, path, sup, body)
+      sexp.source = source(start)
+      sexp
+    end
+
+    def new_colon2(lhs, tok, name)
+      sexp = s(:colon2, lhs, value(name).to_sym)
+      sexp.source = source(tok)
+      sexp
+    end
+
+    def new_colon3(tok, name)
+      s1(:colon3, value(name).to_sym, source(name))
+    end
+
     def new_ivar(tok)
       s1(:ivar, value(tok).to_sym, source(tok))
     end
