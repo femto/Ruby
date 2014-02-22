@@ -37,7 +37,7 @@ describe "The def keyword" do
 
     it "should list lasgn block after all other args" do
       parsed("def foo(a, b = 1); end")[3].should == [:args, :a, :b, [:block, [:lasgn, :b, [:int, 1]]]]
-      parsed("def foo(b = 1, *c); end")[3].should == [:args, :b, :"*c", [:block, [:lasgn, :b, [:int, 1]]]]
+      parsed("def foo(b = 1,*c); end")[3].should == [:args, :b, :"*c", [:block, [:lasgn, :b, [:int, 1]]]]
       parsed("def foo(b = 1, &block); end")[3].should == [:args, :b, :"&block", [:block, [:lasgn, :b, [:int, 1]]]]
     end
   end
