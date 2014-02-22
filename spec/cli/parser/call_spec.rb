@@ -77,7 +77,7 @@ describe "Optional paren calls" do
   end
 
   it "should parse LPAREN_ARG correctly" do
-    #parsed("x (1).y").should == [:call, nil, :x, [:arglist, [:call, [:int, 1], :y, [:arglist]]]]
+    parsed("x (1).y").should == [:call, nil, :x, [:arglist, [:call, [:int, 1], :y, [:arglist]]]]
     parsed("x(1).y").should == [:call, [:call, nil, :x, [:arglist, [:int, 1]]], :y, [:arglist]]
   end
 end
