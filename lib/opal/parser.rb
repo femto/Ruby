@@ -252,6 +252,10 @@ module Opal
       s1(:int, value(tok), source(tok))
     end
 
+    def new_float(tok)
+      s1(:float, value(tok), source(tok))
+    end
+
     def new_and(lhs, tok, rhs)
       sexp = s(:and, lhs, rhs)
       sexp.source = source(tok)
