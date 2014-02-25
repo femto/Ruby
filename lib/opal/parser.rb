@@ -6,7 +6,7 @@ require 'opal/parser/parser_scope'
 
 module Opal
   class Parser < Racc::Parser
-    attr_reader :lexer, :scope
+    attr_reader :lexer,:file, :scope
     def parse(source, file = '(string)')
       @file = file
       @scopes = []
@@ -254,6 +254,33 @@ module Opal
 
     def new_float(tok)
       s1(:float, value(tok), source(tok))
+    end
+
+    def new_true(tok)
+      s0(:true, source(tok))
+    end
+
+    def new_false(tok)
+      s0(:false, source(tok))
+    end
+
+    def new_nil(tok)
+      s0(:nil, source(tok))
+    end
+
+    def new_array(start, args, finish)
+      args ||= []
+      sexp = s(:array, *args)
+      sexp.source = source(start)
+      sexp
+    end
+
+    def new___FILE__(tok)
+      s1(:str, self.file, source(tok))
+    end
+
+    def new___LINE__(tok)
+      s1(:int, lexer.line, source(tok))
     end
 
     def new_and(lhs, tok, rhs)

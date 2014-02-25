@@ -18,7 +18,7 @@ describe Opal::Parser do
 
   it "false cannot be assigned to" do
     lambda {
-      parsed "true = 1"
+      parsed "false = 1"
     }.should raise_error(Exception)
   end
 
