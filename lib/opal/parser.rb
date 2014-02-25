@@ -418,6 +418,23 @@ module Opal
       s1(:sym, value(tok).to_sym, source(tok))
     end
 
+    def new_op_asgn(op, lhs, rhs)
+      case value(op).to_sym
+        when :"||"
+          result = s(:op_asgn_or, new_gettable(lhs))
+          result << (lhs << rhs)
+        when :"&&"
+          result = s(:op_asgn_and, new_gettable(lhs))
+          result << (lhs << rhs)
+        else
+          result = lhs
+          result << new_call(new_gettable(lhs), op, [rhs])
+
+      end
+
+      result
+    end
+
     def new_regexp(reg, ending)
       return s(:regexp, '') unless reg
       case reg.type

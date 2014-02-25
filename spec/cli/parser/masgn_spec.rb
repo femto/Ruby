@@ -4,7 +4,7 @@ describe "Masgn" do
   describe "with a single lhs splat" do
     it "returns a s(:masgn)" do
       parsed('*a = 1, 2').first.should == :masgn
-      parsed('* = 1, 2').first.should == :masgn
+      parsed('* =1, 2').first.should == :masgn
     end
 
     it "wraps splat inside a s(:array)" do

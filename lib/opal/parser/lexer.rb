@@ -340,6 +340,12 @@ module Opal
       raise "reached EOF while in string" if scanner.eos?
     end
 
+    def new_op_asgn(value)
+      self.yylval = value
+      :tOP_ASGN
+    end
+
+
 
 
     def yylex
