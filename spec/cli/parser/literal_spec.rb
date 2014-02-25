@@ -76,6 +76,7 @@ describe Opal::Parser do
 
     it "should allow splats combined with any number of norm args" do
       parsed("[1, *2]").should == [:array, [:int, 1], [:splat, [:int, 2]]]
+      parsed("[*1, *2]").should == [:array, [:splat, [:int, 1]], [:splat, [:int, 2]]]
       parsed("[1, 2, *3]").should == [:array, [:int, 1], [:int, 2], [:splat, [:int, 3]]]
     end
   end

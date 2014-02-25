@@ -275,6 +275,12 @@ module Opal
       sexp
     end
 
+    def new_hash(open, assocs, close)
+      sexp = s(:hash, *assocs)
+      sexp.source = source(open)
+      sexp
+    end
+
     def new___FILE__(tok)
       s1(:str, self.file, source(tok))
     end
