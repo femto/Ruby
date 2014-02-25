@@ -134,6 +134,11 @@ module Opal
       { :type => :string, :func => func, :term => term, :paren => paren }
     end
 
+    def new_strterm2(func, term, paren)
+      term = new_strterm(func, term, paren)
+      term.merge({ :balance => true, :nesting => 0 })
+    end
+
 
     def skip(regexp)
       if result = @scanner.scan(regexp)
