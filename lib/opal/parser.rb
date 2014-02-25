@@ -98,6 +98,49 @@ module Opal
       sexp
     end
 
+    def new_block_args(norm, opt, rest, block)
+      res = s(:array)
+
+      if norm
+        norm.each do |arg|
+          if arg.is_a? Symbol
+            scope.add_local arg
+            res << s(:lasgn, arg)
+          else
+            res << arg
+          end
+        end
+      end
+
+      if opt
+        opt[1..-1].each do |_opt|
+          res << s(:lasgn, _opt[1])
+        end
+      end
+
+      if rest
+        r = rest.to_s[1..-1].to_sym
+        res << new_splat(nil, s(:lasgn, r))
+        scope.add_local r
+      end
+
+      if block
+        b = block.to_s[1..-1].to_sym
+        res << s(:block_pass, s(:lasgn, b))
+        scope.add_local b
+      end
+
+      res << opt if opt
+
+      args = res.size == 2 && norm ? res[1] : s(:masgn, res)
+
+      if args.type == :array
+        s(:masgn, args)
+      else
+        args
+      end
+    end
+
     def new_args(norm, opt, rest, block)
       res = s(:args)
 
