@@ -445,6 +445,13 @@ module Opal
       result
     end
 
+    def new_op_asgn1(lhs, args, op, rhs)
+      arglist = s(:arglist, *args)
+      sexp = s(:op_asgn1, lhs, arglist, value(op), rhs)
+      sexp.source = source(op)
+      sexp
+    end
+
     def new_regexp(reg, ending)
       return s(:regexp, '') unless reg
       case reg.type
