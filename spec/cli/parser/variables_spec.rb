@@ -78,6 +78,7 @@ describe Opal::Parser do
   it "references the number 1..9 as first part" do
     parsed('$1').should == [:nth_ref, '1']
     parsed('$9').should == [:nth_ref, '9']
+    parsed('$999').should == [:nth_ref, '999']
   end
 
   it "parses constants" do
