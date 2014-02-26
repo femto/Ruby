@@ -2,7 +2,7 @@ require File.expand_path('../../spec_helper', __FILE__)
 
 describe "Singleton classes" do
   it "returns an empty s(:block) when given an empty body" do
-    parsed('class << A; end')[2].should == [:block]
+    parsed('class << A ;end')[2].should == [:block]
   end
 
   it "does not place single expressions into an s(:block)" do

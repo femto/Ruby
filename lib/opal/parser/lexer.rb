@@ -130,6 +130,23 @@ module Opal
       @lex_state = after_operator? ? :expr_arg : :expr_beg
     end
 
+    def heredoc_identifier
+      if scan(/(-?)['"]?(\w+)['"]?/)
+        heredoc = @scanner[2]
+        self.strterm = new_strterm(STR_DQUOTE, heredoc, heredoc)
+        self.strterm[:type] = :heredoc
+
+        # if ruby code at end of line after heredoc, we have to store it to
+        # parse after heredoc is finished parsing
+        end_of_line = scan(/.*\n/)
+        self.strterm[:scanner] = StringScanner.new(end_of_line) if end_of_line != "\n"
+
+        self.line += 1
+        self.yylval = heredoc
+        return :tSTRING_BEG
+      end
+    end
+
     def new_strterm(func, term, paren)
       { :type => :string, :func => func, :term => term, :paren => paren }
     end

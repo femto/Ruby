@@ -470,6 +470,12 @@ module Opal
       sexp
     end
 
+    def new_sclass(kw, expr, body, end_tok)
+      sexp = s(:sclass, expr, body)
+      sexp.source = source(kw)
+      sexp
+    end
+
 
     def new_regexp(reg, ending)
       return s(:regexp, '') unless reg
