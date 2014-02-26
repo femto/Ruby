@@ -452,6 +452,13 @@ module Opal
       sexp
     end
 
+    def new_or(lhs, tok, rhs)
+      sexp = s(:or, lhs, rhs)
+      sexp.source = source(tok)
+      sexp
+    end
+
+
     def new_regexp(reg, ending)
       return s(:regexp, '') unless reg
       case reg.type
