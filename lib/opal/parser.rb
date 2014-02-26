@@ -263,6 +263,28 @@ module Opal
       str
     end
 
+    def new_super(kw, args)
+      if args.nil?
+        sexp = s(:super, nil)
+      else
+        sexp = s(:super, s(:arglist, *args))
+      end
+
+      sexp.source = source(kw)
+      sexp
+    end
+
+    def new_yield(args)
+      args ||= []
+      s(:yield, *args)
+    end
+
+    def new_while(kw, test, body)
+      sexp = s(:while, test, body)
+      sexp.source = source(kw)
+      sexp
+    end
+
     def new_int(tok)
       s1(:int, value(tok), source(tok))
     end
