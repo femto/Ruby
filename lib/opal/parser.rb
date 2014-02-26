@@ -458,6 +458,18 @@ module Opal
       sexp
     end
 
+    def new_return(kw, args=nil)
+      if args.nil?
+        sexp = s(:return)
+      elsif args.length == 1
+        sexp = s(:return, args[0])
+      else
+        sexp = s(:return, s(:array, *args))
+      end
+
+      sexp
+    end
+
 
     def new_regexp(reg, ending)
       return s(:regexp, '') unless reg

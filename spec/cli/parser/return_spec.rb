@@ -7,6 +7,7 @@ describe "The return keyword" do
 
   it "returns s(:return) with the direct argument when given one argument" do
     parsed("return 1").should == [:return, [:int, 1]]
+    parsed("a=return 1").should == [:lasgn, :a, [:return, [:int, 1]]]
     parsed("return *2").should == [:return, [:splat, [:int, 2]]]
   end
 
