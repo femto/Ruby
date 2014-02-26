@@ -18,7 +18,10 @@ describe "Strings" do
   end
 
   it "supports interpolation with double quotes" do
+    parsed('foo=1;"#{foo}"').should == [:block, [:lasgn, :foo, [:int, 1]], [:dstr, "", [:evstr, [:lvar, :foo]]]]
     parsed('"#{foo}"').should == [:dstr, "", [:evstr, [:call, nil, :foo, [:arglist]]]]
+    parsed('"abc#@foo"').should == [:dstr, "abc", [:evstr, [:ivar, :@foo]]]
+    parsed('"abc#@foo.def"').should == [:dstr, "abc", [:evstr, [:ivar, :@foo]], [:str, ".def"]]
     parsed('"#@foo"').should == [:dstr, "", [:evstr, [:ivar, :@foo]]]
     parsed('"#$foo"').should == [:dstr, "", [:evstr, [:gvar, :$foo]]]
     parsed('"#@@foo"').should == [:dstr, "", [:evstr, [:cvar, :@@foo]]]

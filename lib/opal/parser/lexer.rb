@@ -175,6 +175,57 @@ module Opal
       @scanner.pos -= n
     end
 
+    def here_document(str_parse)
+      eos_regx = /[ \t]*#{Regexp.escape(str_parse[:term])}(\r*\n|$)/
+      expand = true
+
+      if check(eos_regx)
+        scan(/[ \t]*#{Regexp.escape(str_parse[:term])}/)
+
+        if str_parse[:scanner]
+          @scanner_stack << str_parse[:scanner]
+          @scanner = str_parse[:scanner]
+        end
+
+        return :tSTRING_END
+      end
+
+      str_buffer = []
+
+      if scan(/#/)
+        if tok = peek_variable_name
+          return tok
+        end
+
+        str_buffer << '#'
+      end
+
+      until check(eos_regx) && scanner.bol?
+        if scanner.eos?
+          raise "reached EOF while in heredoc"
+        end
+
+        if scan(/\n/)
+          str_buffer << scanner.matched
+        elsif expand && check(/#(?=[\$\@\{])/)
+          break
+        elsif scan(/\\/)
+          str_buffer << self.read_escape
+        else
+          reg = Regexp.new("[^\#\0\\\\\n]+|.")
+
+          scan reg
+          str_buffer << scanner.matched
+        end
+      end
+
+      complete_str = str_buffer.join ''
+      @line += complete_str.count("\n")
+
+      self.yylval = complete_str
+      return :tSTRING_CONTENT
+    end
+
     def parse_string
       str_parse = self.strterm
       func = str_parse[:func]
@@ -360,6 +411,42 @@ module Opal
     def new_op_asgn(value)
       self.yylval = value
       :tOP_ASGN
+    end
+
+    def read_escape
+      if scan(/\\/)
+        "\\"
+      elsif scan(/n/)
+        "\n"
+      elsif scan(/t/)
+        "\t"
+      elsif scan(/r/)
+        "\r"
+      elsif scan(/f/)
+        "\f"
+      elsif scan(/v/)
+        "\v"
+      elsif scan(/a/)
+        "\a"
+      elsif scan(/e/)
+        "\e"
+      elsif scan(/s/)
+        " "
+      elsif scan(/[0-7]{1,3}/)
+        (matched.to_i(8) % 0x100).chr
+      elsif scan(/x([0-9a-fA-F]{1,2})/)
+        scanner[1].to_i(16).chr
+      elsif scan(/u([0-9a-zA-Z]{1,4})/)
+        if defined?(::Encoding)
+          scanner[1].to_i(16).chr(Encoding::UTF_8)
+        else
+          # FIXME: no encoding on 1.8
+          ""
+        end
+      else
+        # escaped char doesnt need escaping, so just return it
+        scan(/./)
+      end
     end
 
 

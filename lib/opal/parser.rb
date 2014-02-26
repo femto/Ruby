@@ -195,10 +195,6 @@ module Opal
       s1(:colon3, value(name).to_sym, source(name))
     end
 
-    def new_ivar(tok)
-      s1(:ivar, value(tok).to_sym, source(tok))
-    end
-
     def new_attrasgn(recv, op, args=[])
       arglist = s(:arglist, *args)
       sexp = s(:attrasgn, recv, op, arglist)
@@ -252,6 +248,19 @@ module Opal
         else
           raise "Bad var_ref type: #{ref.type}"
       end
+    end
+
+    def new_xstr(start_t, str, end_t)
+      return s(:xstr, '') unless str
+      case str.type
+        when :str   then str.type = :xstr
+        when :dstr  then str.type = :dxstr
+        when :evstr then str = s(:dxstr, '', str)
+      end
+
+      str.source = source(start_t)
+
+      str
     end
 
     def new_int(tok)
@@ -474,6 +483,40 @@ module Opal
       sexp = s(:sclass, expr, body)
       sexp.source = source(kw)
       sexp
+    end
+
+    def new_str(str)
+      # cover empty strings
+      return s(:str, "") unless str
+      # catch s(:str, "", other_str)
+      if str.size == 3 and str[1] == "" and str.type == :str
+        return str[2]
+        # catch s(:str, "content", more_content)
+      elsif str.type == :str && str.size > 3
+        str.type = :dstr
+        str
+        # top level evstr should be a dstr
+      elsif str.type == :evstr
+        s(:dstr, "", str)
+      else
+        str
+      end
+    end
+
+    def new_evstr(str)
+      s(:evstr, str)
+    end
+
+    def new_ivar(tok)
+      s1(:ivar, value(tok).to_sym, source(tok))
+    end
+
+    def new_gvar(tok)
+      s1(:gvar, value(tok).to_sym, source(tok))
+    end
+
+    def new_cvar(tok)
+      s1(:cvar, value(tok).to_sym, source(tok))
     end
 
 
