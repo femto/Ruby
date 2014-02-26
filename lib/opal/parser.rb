@@ -89,6 +89,12 @@ module Opal
       sexp
     end
 
+    def new_module(kw, path, body, end_tok)
+      sexp = s(:module, path, body)
+      sexp.source = source(kw)
+      sexp
+    end
+
     def new_def(kw, recv, name, args, body, end_tok)
       body = s(:block, body) if body.type != :block
       body << s(:nil) if body.size == 1
