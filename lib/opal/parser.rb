@@ -420,6 +420,10 @@ module Opal
       sexp
     end
 
+    def new_not(kw, expr)
+      s1(:not, expr, source(kw))
+    end
+
     def new_sym(tok)
       s1(:sym, value(tok).to_sym, source(tok))
     end
