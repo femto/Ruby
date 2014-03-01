@@ -104,6 +104,22 @@ module Pry
       verbose? || (STDIN.tty? && @io.kind_of?(StdioInputMethod) ||
           (defined?(ReadlineInputMethod) && @io.kind_of?(ReadlineInputMethod)))
     end
+
+    def prompt_mode=(mode)
+      @prompt_mode = mode
+      pconf = Pry.conf[:PROMPT][mode]
+      @prompt_i = pconf[:PROMPT_I]
+      @prompt_s = pconf[:PROMPT_S]
+      @prompt_c = pconf[:PROMPT_C]
+      @prompt_n = pconf[:PROMPT_N]
+      @return_format = pconf[:RETURN]
+      if ai = pconf.include?(:AUTO_INDENT)
+        @auto_indent_mode = ai
+      else
+        @auto_indent_mode = Pry.conf[:AUTO_INDENT]
+      end
+    end
+
     def verbose?
       if @verbose.nil?
         if defined?(ReadlineInputMethod) && @io.kind_of?(ReadlineInputMethod)

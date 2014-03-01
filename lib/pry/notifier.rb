@@ -10,6 +10,7 @@ module Pry
 
     class AbstractNotifier
       # Creates a new Notifier object
+      attr_reader :prefix
       def initialize(prefix, base_notifier)
         @prefix = prefix
         @base_notifier = base_notifier
@@ -17,6 +18,12 @@ module Pry
 
       def notify?
         true
+      end
+
+      def puts(*objs)
+        if notify?
+          @base_notifier.puts(*objs.collect{|obj| prefix + obj.to_s})
+        end
       end
 
       def ppx(prefix, *objs)

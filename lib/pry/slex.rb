@@ -8,6 +8,7 @@ module Pry
     D_DEBUG = DOUT::def_notifier(2, "Debug: ")
     D_DETAIL = DOUT::def_notifier(4, "Detail: ")
 
+    #DOUT.level = 2
     DOUT.level = 4
     #DOUT.level = Notifier::D_NOMSG
 
@@ -88,6 +89,59 @@ module Pry
         end
         node
       end
+
+      def match_io(io, op = "")
+        if op == ""
+          ch = io.getc
+          if ch == nil
+            return nil
+          end
+        else
+          ch = io.getc_of_rests
+        end
+        if ch.nil?
+          if @preproc.nil? || @preproc.call(op, io)
+            D_DETAIL.printf("op1: %s\n", op)
+            @postproc.call(op, io)
+          else
+            nil
+          end
+        else
+          if node = @Tree[ch]
+            if ret = node.match_io(io, op+ch)
+              ret
+            else
+              io.ungetc ch
+              if @postproc and @preproc.nil? || @preproc.call(op, io)
+                DOUT.exec_if{D_DETAIL.printf "op2: %s\n", op.inspect}
+                @postproc.call(op, io)
+              else
+                nil
+              end
+            end
+          else
+            io.ungetc ch
+            if @postproc and @preproc.nil? || @preproc.call(op, io)
+              D_DETAIL.printf("op3: %s\n", op)
+              @postproc.call(op, io)
+            else
+              nil
+            end
+          end
+        end
+      end
+    end
+    def match(token)
+      case token
+        when Array
+        when String
+          return match(token.split(//))
+        else
+          return @head.match_io(token)
+      end
+      ret = @head.match(token)
+      D_DETAIL.exec_if{D_DETAIL.printf "match end: %s:%s\n", ret, token.inspect}
+      ret
     end
   end
 end

@@ -134,6 +134,8 @@ class RubyLex
     @io.eof?
   end
 
+
+
   def getc_of_rests
     if @rests.empty?
       nil

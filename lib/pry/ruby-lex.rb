@@ -79,8 +79,7 @@ class RubyLex
     end
 
     @OP.def_rule("=begin",
-                 proc{|op, io| @prev_char_no == 0 && peek(0) =~ /\s/}) do
-    |op, io|
+                 proc{|op, io| @prev_char_no == 0 && peek(0) =~ /\s/}) do  |op, io|
       @ltype = "="
       until getc == "\n"; end
       until peek_equal?("=end") && peek(4) =~ /\s/
@@ -250,6 +249,221 @@ class RubyLex
     lex_int2
   end
 
+  def lex_int2
+    @OP.def_rules("]", "}", ")") do
+    |op, io|
+      @lex_state = EXPR_END
+      @indent -= 1
+      @indent_stack.pop
+      Token(op)
+    end
+
+    @OP.def_rule(":") do
+    |op, io|
+      if @lex_state == EXPR_END || peek(0) =~ /\s/
+        @lex_state = EXPR_BEG
+        Token(TkCOLON)
+      else
+        @lex_state = EXPR_FNAME
+        Token(TkSYMBEG)
+      end
+    end
+
+    @OP.def_rule("::") do
+    |op, io|
+
+      if @lex_state == EXPR_BEG or @lex_state == EXPR_ARG && @space_seen
+        @lex_state = EXPR_BEG
+        Token(TkCOLON3)
+      else
+        @lex_state = EXPR_DOT
+        Token(TkCOLON2)
+      end
+    end
+
+    @OP.def_rule("/") do
+    |op, io|
+      if @lex_state == EXPR_BEG || @lex_state == EXPR_MID
+        identify_string(op)
+      elsif peek(0) == '='
+        getc
+        @lex_state = EXPR_BEG
+        Token(TkOPASGN, "/") #/)
+      elsif @lex_state == EXPR_ARG and @space_seen and peek(0) !~ /\s/
+        identify_string(op)
+      else
+        @lex_state = EXPR_BEG
+        Token("/") #/)
+      end
+    end
+
+    @OP.def_rules("^") do
+    |op, io|
+      @lex_state = EXPR_BEG
+      Token("^")
+    end
+
+    #       @OP.def_rules("^=") do
+    # 	@lex_state = EXPR_BEG
+    # 	Token(OP_ASGN, :^)
+    #       end
+
+    @OP.def_rules(",") do
+    |op, io|
+      @lex_state = EXPR_BEG
+      Token(op)
+    end
+
+    @OP.def_rules(";") do
+    |op, io|
+      @lex_state = EXPR_BEG
+      until (@indent_stack.empty? ||
+          [TkLPAREN, TkLBRACK, TkLBRACE,
+           TkfLPAREN, TkfLBRACK, TkfLBRACE].include?(@indent_stack.last))
+        @indent_stack.pop
+      end
+      Token(op)
+    end
+
+    @OP.def_rule("~") do
+    |op, io|
+      @lex_state = EXPR_BEG
+      Token("~")
+    end
+
+    @OP.def_rule("~@", proc{|op, io| @lex_state == EXPR_FNAME}) do
+    |op, io|
+      @lex_state = EXPR_BEG
+      Token("~")
+    end
+
+    @OP.def_rule("(") do
+    |op, io|
+      @indent += 1
+      if @lex_state == EXPR_BEG || @lex_state == EXPR_MID
+        @lex_state = EXPR_BEG
+        tk_c = TkfLPAREN
+      else
+        @lex_state = EXPR_BEG
+        tk_c = TkLPAREN
+      end
+      @indent_stack.push tk_c
+      Token(tk_c)
+    end
+
+    @OP.def_rule("[]", proc{|op, io| @lex_state == EXPR_FNAME}) do
+    |op, io|
+      @lex_state = EXPR_ARG
+      Token("[]")
+    end
+
+    @OP.def_rule("[]=", proc{|op, io| @lex_state == EXPR_FNAME}) do
+    |op, io|
+      @lex_state = EXPR_ARG
+      Token("[]=")
+    end
+
+    @OP.def_rule("[") do
+    |op, io|
+      @indent += 1
+      if @lex_state == EXPR_FNAME
+        tk_c = TkfLBRACK
+      else
+        if @lex_state == EXPR_BEG || @lex_state == EXPR_MID
+          tk_c = TkLBRACK
+        elsif @lex_state == EXPR_ARG && @space_seen
+          tk_c = TkLBRACK
+        else
+          tk_c = TkfLBRACK
+        end
+        @lex_state = EXPR_BEG
+      end
+      @indent_stack.push tk_c
+      Token(tk_c)
+    end
+
+    @OP.def_rule("{") do
+    |op, io|
+      @indent += 1
+      if @lex_state != EXPR_END && @lex_state != EXPR_ARG
+        tk_c = TkLBRACE
+      else
+        tk_c = TkfLBRACE
+      end
+      @lex_state = EXPR_BEG
+      @indent_stack.push tk_c
+      Token(tk_c)
+    end
+
+    @OP.def_rule('\\') do
+    |op, io|
+      if getc == "\n"
+        @space_seen = true
+        @continue = true
+        Token(TkSPACE)
+      else
+        read_escape
+        Token("\\")
+      end
+    end
+
+    @OP.def_rule('%') do
+    |op, io|
+      if @lex_state == EXPR_BEG || @lex_state == EXPR_MID
+        identify_quotation
+      elsif peek(0) == '='
+        getc
+        Token(TkOPASGN, :%)
+      elsif @lex_state == EXPR_ARG and @space_seen and peek(0) !~ /\s/
+        identify_quotation
+      else
+        @lex_state = EXPR_BEG
+        Token("%") #))
+      end
+    end
+
+    @OP.def_rule('$') do
+    |op, io|
+      identify_gvar
+    end
+
+    @OP.def_rule('@') do
+    |op, io|
+      if peek(0) =~ /[\w@]/
+        ungetc
+        identify_identifier
+      else
+        Token("@")
+      end
+    end
+
+    #       @OP.def_rule("def", proc{|op, io| /\s/ =~ io.peek(0)}) do
+    # 	|op, io|
+    # 	@indent += 1
+    # 	@lex_state = EXPR_FNAME
+    # #	@lex_state = EXPR_END
+    # #	until @rests[0] == "\n" or @rests[0] == ";"
+    # #	  rests.shift
+    # #	end
+    #       end
+
+    @OP.def_rule("") do
+    |op, io|
+      printf "MATCH: start %s: %s\n", op, io.inspect if RubyLex.debug?
+      if peek(0) =~ /[0-9]/
+        t = identify_number
+      elsif peek(0) =~ /[^\x00-\/:-@\[-^`{-\x7F]/
+        t = identify_identifier
+      end
+      printf "MATCH: end %s: %s\n", op, io.inspect if RubyLex.debug?
+      t
+    end
+
+    p @OP if RubyLex.debug?
+  end
+
+
+
   def token
     @prev_seek = @seek
     @prev_line_no = @line_no
@@ -269,6 +483,35 @@ class RubyLex
       get_readed
     end
     tk
+  end
+
+  def buf_input
+    prompt
+    line = @input.call
+    return nil unless line
+    @rests.concat line.chars.to_a
+    true
+  end
+  private :buf_input
+
+  def getc
+    while @rests.empty?
+      @rests.push nil unless buf_input
+    end
+    c = @rests.shift
+    if @here_header
+      @here_readed.push c
+    else
+      @readed.push c
+    end
+    @seek += 1
+    if c == "\n"
+      @line_no += 1
+      @char_no = 0
+    else
+      @char_no += 1
+    end
+    c
   end
 
   def set_prompt(p = nil, &block)
@@ -325,6 +568,27 @@ class RubyLex
       nil
     else
       line
+    end
+  end
+
+  def ungetc(c = nil)
+    if @here_readed.empty?
+      c2 = @readed.pop
+    else
+      c2 = @here_readed.pop
+    end
+    c = c2 unless c
+    @rests.unshift c #c =
+    @seek -= 1
+    if c == "\n"
+      @line_no -= 1
+      if idx = @readed.rindex("\n")
+        @char_no = idx + 1
+      else
+        @char_no = @base_char_no + @readed.size
+      end
+    else
+      @char_no -= 1
     end
   end
 
